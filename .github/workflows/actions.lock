@@ -3,8 +3,7 @@
 # Docs: https://gh.io/actions-lockfile
 version: 'v0.0.2'
 workflows:
-    '.github/workflows/release-test.yml':
-        - 'actions/checkout@v7.0.1'
+    '.github/workflows/release-test.yml': []
     '.github/workflows/release.yml':
         - 'actions/attest-build-provenance@v4.0.0'
         - 'actions/checkout@v7.0.1'

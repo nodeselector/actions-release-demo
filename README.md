@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- |
 | Serialized version selection | One `release` concurrency group |
 | Predictable versions | Latest stable tag plus `major`, `minor`, or `patch`; RCs increment independently |
-| Exact source under test | Validation workflow is dispatched at the RC tag and invokes `uses: $/` |
+| Exact source under test | Validation is dispatched at the RC tag and invokes `uses: $/` without checking out a workspace |
 | No tag rewriting | Tags are created once without force; a repository ruleset blocks updates and deletion |
 | Immutable publication | Releases are drafted, assets attached, then published with release immutability enabled |
 | Build provenance | GitHub artifact attestation binds the archive to its source workflow and commit |

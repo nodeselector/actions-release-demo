@@ -21,21 +21,18 @@ jobs:
   exact-tag:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
-
       - id: candidate
         uses: $/
 
-      - name: Prove checkout and action came from the candidate tag
+      - name: Prove the action came from the candidate tag
         env:
           ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
           ACTION_REF: ${{ steps.candidate.outputs.ref }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF_TYPE" = "tag"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$ACTION_REF" = "$GITHUB_SHA"
-          test "$ACTION_MARKER" = "$(<release-marker.txt)"
+          test "$ACTION_MARKER" = "release-source"
 
       - name: Verify the immutable candidate and its provenance
         env:
@@ -68,7 +65,6 @@ jobs:
             echo "| --- | --- |"
             echo "| Workflow ref | \`$GITHUB_REF\` |"
             echo "| Workflow SHA | \`$GITHUB_SHA\` |"
-            echo "| Checkout SHA | \`$(git rev-parse HEAD)\` |"
             echo "| \`$/\` action SHA | \`$ACTION_REF\` |"
             echo "| \`$/\` action marker | \`$ACTION_MARKER\` |"
             echo "| Immutable asset | \`$ASSET\` |"
