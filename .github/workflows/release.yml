@@ -22,7 +22,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ inputs.ref }}
-        run: gh workflow run release-test.yml --ref "$REF" -f request_id="$GITHUB_RUN_ID"
+        run: gh workflow run release-test.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f request_id="$GITHUB_RUN_ID"
 
       - name: Wait for the exact validation run
         env:
@@ -32,6 +32,7 @@ jobs:
           title="Validate $REF for request $GITHUB_RUN_ID"
           for _ in {1..30}; do
             run_id="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
               --workflow release-test.yml \
               --event workflow_dispatch \
               --limit 20 \
@@ -45,6 +46,6 @@ jobs:
           done
 
           test -n "$run_id"
-          gh run watch "$run_id" --exit-status
-          url="$(gh run view "$run_id" --json url --jq .url)"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+          url="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
           echo "Validated run: $url" >> "$GITHUB_STEP_SUMMARY"
