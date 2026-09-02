@@ -213,6 +213,29 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.candidate.outputs.commit }}
 
+      - name: Check whether the candidate can be promoted
+        env:
+          BUMP: ${{ inputs.bump }}
+          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin main
+          if git diff --quiet "$GITHUB_SHA" origin/main -- .github/workflows; then
+            exit 0
+          fi
+
+          next_candidate="${CANDIDATE%.*}.$((${CANDIDATE##*.} + 1))"
+          workflow_url="https://github.com/$GITHUB_REPOSITORY/actions/workflows/release.yml"
+          {
+            echo "### Start a new release attempt"
+            echo
+            echo "Workflows on \`main\` changed after [$CANDIDATE](https://github.com/$GITHUB_REPOSITORY/releases/tag/$CANDIDATE) was created, so GitHub won't let this run create the stable tag."
+            echo
+            echo "Run the [Release workflow]($workflow_url) again from \`main\` with the \`$BUMP\` bump. It will create \`$next_candidate\`; the existing candidate remains immutable."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Workflows changed on main. Run Release again from main with the $BUMP bump; the next attempt will create $next_candidate."
+          exit 1
+
       - name: Download and verify the candidate asset
         env:
           ASSET: ${{ needs.candidate.outputs.asset }}

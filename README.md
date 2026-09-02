@@ -40,9 +40,10 @@ Open the [Release workflow](../../actions/workflows/release.yml), select
 `patch`, `minor`, or `major`, then run it from `main`.
 
 If the latest stable tag is `v1.4.2`, a minor release starts with
-`v1.5.0-rc.1`. If candidate validation fails, the published prerelease remains
-as an audit record and the next minor release uses `v1.5.0-rc.2`. Only a
-candidate that passes validation is published as `v1.5.0`.
+`v1.5.0-rc.1`. If validation fails, or a workflow on `main` changes before
+promotion, the published prerelease remains as an audit record. Run the
+workflow again with the same bump to create `v1.5.0-rc.2`. Only a candidate
+that passes validation is published as `v1.5.0`.
 
 ## Why validation runs separately
 
