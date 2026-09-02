@@ -1,51 +1,261 @@
-name: Release candidate demo
-run-name: Dispatch ${{ inputs.ref }}
+name: Release
+run-name: Release next ${{ inputs.bump }} version
 
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: Existing release-candidate tag to validate
+      bump:
+        description: Semantic version component to increment
         required: true
-        default: v0.1.0-rc.1
-        type: string
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
-permissions:
-  actions: write
-  contents: read
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  validate:
+  candidate:
+    name: Build and publish candidate
     runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    outputs:
+      asset: ${{ steps.version.outputs.asset }}
+      candidate: ${{ steps.version.outputs.candidate }}
+      commit: ${{ steps.version.outputs.commit }}
+      stable: ${{ steps.version.outputs.stable }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Dispatch validation at the RC tag
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - id: version
+        name: Select the next release candidate
         env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          git fetch --force --tags origin main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+          latest="$(
+            git tag --list 'v*.*.*' --sort=-version:refname |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              head -1 || true
+          )"
+          latest="${latest:-v0.0.0}"
+          IFS=. read -r major minor patch <<< "${latest#v}"
+
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+            *) echo "::error::Unsupported bump: $BUMP"; exit 1 ;;
+          esac
+
+          version="$major.$minor.$patch"
+          stable="v$version"
+          last_rc="$(
+            git tag --list "$stable-rc.*" |
+              sed -nE 's/.*-rc\.([0-9]+)$/\1/p' |
+              sort -n |
+              tail -1
+          )"
+          candidate="$stable-rc.$((${last_rc:-0} + 1))"
+          asset="actions-release-demo-$stable.tar.gz"
+
+          if git show-ref --verify --quiet "refs/tags/$stable"; then
+            echo "::error::$stable already exists"
+            exit 1
+          fi
+          if git show-ref --verify --quiet "refs/tags/$candidate"; then
+            echo "::error::$candidate already exists"
+            exit 1
+          fi
+
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+          echo "commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build the release asset
+        env:
+          ASSET: ${{ steps.version.outputs.asset }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/package
+          cp action.yml release-marker.txt README.md dist/package/
+          printf '{"version":"%s","commit":"%s"}\n' "$VERSION" "$GITHUB_SHA" > dist/package/release.json
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -C dist/package -cf - . | gzip -n > "dist/$ASSET"
+          sha256sum "dist/$ASSET"
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@v4.0.0
+        with:
+          subject-path: dist/${{ steps.version.outputs.asset }}
+
+      - name: Create the immutable candidate tag
+        env:
+          CANDIDATE: ${{ steps.version.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin main
+          test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "$CANDIDATE" "$GITHUB_SHA" -m "Release candidate $CANDIDATE"
+          git push origin "refs/tags/$CANDIDATE"
+
+      - name: Publish the immutable candidate release
+        env:
+          ASSET: ${{ steps.version.outputs.asset }}
+          CANDIDATE: ${{ steps.version.outputs.candidate }}
           GH_TOKEN: ${{ github.token }}
-          REF: ${{ inputs.ref }}
-        run: gh workflow run release-test.yml --repo "$GITHUB_REPOSITORY" --ref "$REF" -f request_id="$GITHUB_RUN_ID"
+        run: |
+          set -euo pipefail
+          gh release create "$CANDIDATE" "dist/$ASSET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft \
+            --prerelease \
+            --latest=false \
+            --title "$CANDIDATE" \
+            --notes "Immutable release candidate for validation."
+          gh release edit "$CANDIDATE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --prerelease
+
+  validate:
+    name: Validate candidate at its tag
+    needs: candidate
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch validation at the candidate tag
+        env:
+          ASSET: ${{ needs.candidate.outputs.asset }}
+          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release-test.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$CANDIDATE" \
+            -f asset="$ASSET" \
+            -f request_id="$GITHUB_RUN_ID"
 
       - name: Wait for the exact validation run
         env:
+          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
           GH_TOKEN: ${{ github.token }}
-          REF: ${{ inputs.ref }}
         run: |
-          title="Validate $REF for request $GITHUB_RUN_ID"
+          set -euo pipefail
+          title="Validate $CANDIDATE for request $GITHUB_RUN_ID"
+          run_id=""
           for _ in {1..30}; do
-            run_id="$(gh run list \
-              --repo "$GITHUB_REPOSITORY" \
-              --workflow release-test.yml \
-              --event workflow_dispatch \
-              --limit 20 \
-              --json databaseId,displayTitle \
-              --jq ".[] | select(.displayTitle == \"$title\") | .databaseId" |
-              head -1)"
-            if [[ -n "$run_id" ]]; then
-              break
-            fi
+            run_id="$(
+              gh run list \
+                --repo "$GITHUB_REPOSITORY" \
+                --workflow release-test.yml \
+                --event workflow_dispatch \
+                --limit 20 \
+                --json databaseId,displayTitle \
+                --jq ".[] | select(.displayTitle == \"$title\") | .databaseId" |
+                head -1
+            )"
+            [[ -n "$run_id" ]] && break
             sleep 2
           done
 
           test -n "$run_id"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
           url="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
-          echo "Validated run: $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Candidate validation: $url" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish stable release
+    needs: [candidate, validate]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.candidate.outputs.commit }}
+
+      - name: Download and verify the candidate asset
+        env:
+          ASSET: ${{ needs.candidate.outputs.asset }}
+          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          gh release verify "$CANDIDATE" --repo "$GITHUB_REPOSITORY"
+          gh release download "$CANDIDATE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$ASSET" \
+            --dir dist
+          gh release verify-asset "$CANDIDATE" "dist/$ASSET" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "dist/$ASSET" --repo "$GITHUB_REPOSITORY"
+
+      - name: Create the immutable stable tag
+        env:
+          STABLE: ${{ needs.candidate.outputs.stable }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$STABLE" >/dev/null 2>&1; then
+            echo "::error::$STABLE already exists"
+            exit 1
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "$STABLE" "$GITHUB_SHA" -m "Release $STABLE"
+          git push origin "refs/tags/$STABLE"
+
+      - name: Publish the immutable stable release
+        env:
+          ASSET: ${{ needs.candidate.outputs.asset }}
+          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
+          GH_TOKEN: ${{ github.token }}
+          STABLE: ${{ needs.candidate.outputs.stable }}
+        run: |
+          set -euo pipefail
+          gh release create "$STABLE" "dist/$ASSET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --draft \
+            --generate-notes \
+            --notes-start-tag "$CANDIDATE" \
+            --title "$STABLE"
+          gh release edit "$STABLE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --latest
+
+          for _ in {1..30}; do
+            if gh release verify "$STABLE" --repo "$GITHUB_REPOSITORY"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Release attestation was not available"
+          exit 1

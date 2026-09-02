@@ -5,10 +5,17 @@ outputs:
   marker:
     description: Marker stored beside this action
     value: ${{ steps.marker.outputs.value }}
+  ref:
+    description: Commit selected for this action
+    value: ${{ steps.marker.outputs.ref }}
 
 runs:
   using: composite
   steps:
     - id: marker
       shell: bash
-      run: echo "value=$(<"$GITHUB_ACTION_PATH/release-marker.txt")" >> "$GITHUB_OUTPUT"
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        echo "ref=$ACTION_REF" >> "$GITHUB_OUTPUT"
+        echo "value=$(<"$GITHUB_ACTION_PATH/release-marker.txt")" >> "$GITHUB_OUTPUT"

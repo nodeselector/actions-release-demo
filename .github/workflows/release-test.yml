@@ -4,12 +4,17 @@ run-name: Validate ${{ github.ref_name }} for request ${{ inputs.request_id }}
 on:
   workflow_dispatch:
     inputs:
+      asset:
+        description: Candidate release asset name
+        required: true
+        type: string
       request_id:
         description: Parent workflow run ID
         required: true
         type: string
 
 permissions:
+  attestations: read
   contents: read
 
 jobs:
@@ -21,20 +26,50 @@ jobs:
       - id: candidate
         uses: $/
 
-      - name: Prove checkout and action came from the RC tag
+      - name: Prove checkout and action came from the candidate tag
         env:
           ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
+          ACTION_REF: ${{ steps.candidate.outputs.ref }}
         run: |
+          set -euo pipefail
           test "$GITHUB_REF_TYPE" = "tag"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$ACTION_MARKER" = "release-candidate"
+          test "$ACTION_REF" = "$GITHUB_SHA"
+          test "$ACTION_MARKER" = "$(<release-marker.txt)"
+
+      - name: Verify the immutable candidate and its provenance
+        env:
+          ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
+          ACTION_REF: ${{ steps.candidate.outputs.ref }}
+          ASSET: ${{ inputs.asset }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          verified=false
+          for _ in {1..30}; do
+            if gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"; then
+              verified=true
+              break
+            fi
+            sleep 2
+          done
+          test "$verified" = true
+
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$ASSET"
+          gh release verify-asset "$GITHUB_REF_NAME" "$ASSET" --repo "$GITHUB_REPOSITORY"
+          gh attestation verify "$ASSET" --repo "$GITHUB_REPOSITORY"
+
           {
-            echo "### Exact-tag proof"
+            echo "### Exact candidate proof"
             echo
             echo "| Source | Value |"
             echo "| --- | --- |"
             echo "| Workflow ref | \`$GITHUB_REF\` |"
             echo "| Workflow SHA | \`$GITHUB_SHA\` |"
             echo "| Checkout SHA | \`$(git rev-parse HEAD)\` |"
+            echo "| \`$/\` action SHA | \`$ACTION_REF\` |"
             echo "| \`$/\` action marker | \`$ACTION_MARKER\` |"
+            echo "| Immutable asset | \`$ASSET\` |"
           } >> "$GITHUB_STEP_SUMMARY"
