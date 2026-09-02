@@ -1,15 +1,18 @@
 name: Validate release candidate
-run-name: Validate ${{ github.ref_name }} for release run ${{ inputs.release_run_id }}
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       asset:
         description: Candidate release asset name
         required: true
         type: string
-      release_run_id:
-        description: Release workflow run ID
+      candidate:
+        description: Candidate release tag
+        required: true
+        type: string
+      commit:
+        description: Candidate commit SHA
         required: true
         type: string
 
@@ -18,7 +21,7 @@ permissions:
   contents: read
 
 jobs:
-  exact-tag:
+  candidate:
     name: Validate action and release asset
     runs-on: ubuntu-latest
     steps:
@@ -28,35 +31,37 @@ jobs:
       - name: Confirm the action commit
         env:
           ACTION_REF: ${{ steps.candidate.outputs.ref }}
+          EXPECTED_COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF_TYPE" = "tag"
-          test "$ACTION_REF" = "$GITHUB_SHA"
+          test "$GITHUB_SHA" = "$EXPECTED_COMMIT"
+          test "$ACTION_REF" = "$EXPECTED_COMMIT"
 
       - name: Verify the immutable candidate and its provenance
         env:
           ACTION_REF: ${{ steps.candidate.outputs.ref }}
           ASSET: ${{ inputs.asset }}
+          CANDIDATE: ${{ inputs.candidate }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           verified=false
           for _ in {1..30}; do
-            if gh release verify "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"; then
+            if gh release verify "$CANDIDATE" --repo "$GITHUB_REPOSITORY"; then
               verified=true
               break
             fi
             sleep 2
           done
           if [[ "$verified" != true ]]; then
-            echo "::error::Release attestation for $GITHUB_REF_NAME wasn't available after 60 seconds. Retry this validation run."
+            echo "::error::Release attestation for $CANDIDATE wasn't available after 60 seconds. Run Release again with the same bump."
             exit 1
           fi
 
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$CANDIDATE" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "$ASSET"
-          gh release verify-asset "$GITHUB_REF_NAME" "$ASSET" --repo "$GITHUB_REPOSITORY"
+          gh release verify-asset "$CANDIDATE" "$ASSET" --repo "$GITHUB_REPOSITORY"
           gh attestation verify "$ASSET" --repo "$GITHUB_REPOSITORY"
 
           {
@@ -64,8 +69,8 @@ jobs:
             echo
             echo "| Source | Value |"
             echo "| --- | --- |"
-            echo "| Workflow ref | \`$GITHUB_REF\` |"
-            echo "| Workflow SHA | \`$GITHUB_SHA\` |"
+            echo "| Candidate | [$CANDIDATE](https://github.com/$GITHUB_REPOSITORY/releases/tag/$CANDIDATE) |"
+            echo "| Release workflow SHA | \`$GITHUB_SHA\` |"
             echo "| \`$/\` action SHA | \`$ACTION_REF\` |"
             echo "| Immutable asset | \`$ASSET\` |"
           } >> "$GITHUB_STEP_SUMMARY"

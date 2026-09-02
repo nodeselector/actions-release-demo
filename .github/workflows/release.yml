@@ -143,62 +143,23 @@ jobs:
             --prerelease \
             --latest=false \
             --title "$CANDIDATE" \
-            --notes "Built from [$GITHUB_SHA](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) for exact-tag validation by [release run $GITHUB_RUN_ID](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            --notes "Built from [$GITHUB_SHA](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) for validation by [release run $GITHUB_RUN_ID](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
           gh release edit "$CANDIDATE" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false \
             --prerelease
 
   validate:
-    name: Validate candidate at its tag
+    name: Validate candidate source
     needs: candidate
-    runs-on: ubuntu-latest
     permissions:
-      actions: write
+      attestations: read
       contents: read
-    steps:
-      - name: Dispatch validation at the candidate tag
-        env:
-          ASSET: ${{ needs.candidate.outputs.asset }}
-          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run release-test.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref "$CANDIDATE" \
-            -f asset="$ASSET" \
-            -f release_run_id="$GITHUB_RUN_ID"
-
-      - name: Wait for the exact validation run
-        env:
-          CANDIDATE: ${{ needs.candidate.outputs.candidate }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          title="Validate $CANDIDATE for release run $GITHUB_RUN_ID"
-          run_id=""
-          for _ in {1..30}; do
-            run_id="$(
-              gh run list \
-                --repo "$GITHUB_REPOSITORY" \
-                --workflow release-test.yml \
-                --event workflow_dispatch \
-                --limit 20 \
-                --json databaseId,displayTitle \
-                --jq ".[] | select(.displayTitle == \"$title\") | .databaseId" |
-                head -1
-            )"
-            [[ -n "$run_id" ]] && break
-            sleep 2
-          done
-
-          if [[ -z "$run_id" ]]; then
-            echo "::error::The candidate validation run didn't start within 60 seconds"
-            exit 1
-          fi
-          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
-          url="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
-          echo "Candidate validation: [$CANDIDATE]($url)" >> "$GITHUB_STEP_SUMMARY"
+    uses: $/.github/workflows/release-test.yml
+    with:
+      asset: ${{ needs.candidate.outputs.asset }}
+      candidate: ${{ needs.candidate.outputs.candidate }}
+      commit: ${{ needs.candidate.outputs.commit }}
 
   publish:
     name: Publish stable release

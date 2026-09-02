@@ -15,7 +15,7 @@ flowchart LR
   D[Dispatch major, minor, or patch] --> C[Select next vX.Y.Z-rc.N]
   C --> B[Build and attest asset]
   B --> R[Publish immutable RC]
-  R --> T[Run validation at RC tag]
+  R --> T[Call reusable validation]
   T --> S[Create stable tag at same SHA]
   S --> P[Publish immutable stable release]
 ```
@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- |
 | Serialized version selection | One `release` concurrency group |
 | Predictable versions | Latest stable tag plus `major`, `minor`, or `patch`; existing RC tags increment `rc.N` |
-| Exact source under test | Validation is dispatched at the RC tag and invokes `uses: $/` without checking out a workspace |
+| Exact source under test | The RC tag, reusable workflow, and `$/` action resolve to the release run's commit |
 | Protected tags | Tags are created once without force; a repository ruleset blocks updates and deletion |
 | Immutable publication | Releases are drafted, assets attached, then published with release immutability enabled |
 | Build provenance | GitHub artifact attestation binds the archive to its source workflow and commit |
@@ -45,17 +45,16 @@ promotion, the published prerelease remains as an audit record. Run the
 workflow again with the same bump to create `v1.5.0-rc.2`. Only a candidate
 that passes validation is published as `v1.5.0`.
 
-## Why validation runs separately
+## Why no dynamic ref is needed
 
-`release.yml` is the human entry point. After publishing an RC, it starts
-`release-test.yml` through the workflow dispatch API at the generated tag and
-waits for that specific run. The validation workflow declares
-`workflow_dispatch` so the API can start it at a dynamic ref.
+The release workflow creates the RC tag at its own commit, then calls
+`release-test.yml` with `uses: $/.github/workflows/release-test.yml`. The
+reusable workflow and its `uses: $/` action both resolve from that same commit.
+The candidate tag is passed as an input only to verify the immutable release
+and asset.
 
-A reusable workflow call cannot replace this step because GitHub Actions does
-not allow expressions in `uses:`. The candidate tag therefore cannot be passed
-to `jobs.<job_id>.uses`. Inside the dispatched candidate run, `$/` resolves the
-action from the workflow's exact running commit.
+GitHub Actions does not allow expressions in `uses:`, but this flow does not
+need one: the caller commit is the candidate commit.
 
 ## Verify a release
 
