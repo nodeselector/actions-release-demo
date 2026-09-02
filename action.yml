@@ -1,12 +1,12 @@
-name: Release candidate marker
-description: Reports which repository snapshot supplied this action
+name: Release source marker
+description: Reports the source used to load this action
 
 outputs:
   marker:
-    description: Marker stored beside this action
+    description: Marker stored in the action package
     value: ${{ steps.marker.outputs.value }}
   ref:
-    description: Commit selected for this action
+    description: Ref used to load this action
     value: ${{ steps.marker.outputs.ref }}
 
 runs:

@@ -1,21 +1,21 @@
-# Secure release candidate demo
+# Immutable action release demo
 
-This repository models a real action release without hard-coding a dynamic ref
-in `uses:`. A dispatch selects a semantic-version bump; the pipeline publishes
-an immutable candidate, validates the action at that exact candidate commit
-through `$/`, then promotes the same verified asset to an immutable stable
-release.
+This repository demonstrates a staged GitHub action release. A dispatch selects
+a version bump, publishes an immutable release candidate (RC), validates the
+action at the candidate commit, and publishes the verified asset as an
+immutable stable release.
 
 > [!IMPORTANT]
-> Enable **Settings → General → Releases → Enable release immutability** before
-> running this workflow. GitHub applies the setting only to future releases.
+> In repository settings, go to the "Releases" section and select
+> **Enable release immutability** before running the workflow. The setting
+> applies only to future releases.
 
 ```mermaid
 flowchart LR
   D[Dispatch major, minor, or patch] --> C[Select next vX.Y.Z-rc.N]
   C --> B[Build and attest asset]
   B --> R[Publish immutable RC]
-  R --> T[Dispatch tests at RC tag]
+  R --> T[Run validation at RC tag]
   T --> S[Create stable tag at same SHA]
   S --> P[Publish immutable stable release]
 ```
@@ -25,41 +25,45 @@ flowchart LR
 | Guarantee | How |
 | --- | --- |
 | Serialized version selection | One `release` concurrency group |
-| Predictable versions | Latest stable tag plus `major`, `minor`, or `patch`; RCs increment independently |
+| Predictable versions | Latest stable tag plus `major`, `minor`, or `patch`; existing RC tags increment `rc.N` |
 | Exact source under test | Validation is dispatched at the RC tag and invokes `uses: $/` without checking out a workspace |
-| No tag rewriting | Tags are created once without force; a repository ruleset blocks updates and deletion |
+| Protected tags | Tags are created once without force; a repository ruleset blocks updates and deletion |
 | Immutable publication | Releases are drafted, assets attached, then published with release immutability enabled |
 | Build provenance | GitHub artifact attestation binds the archive to its source workflow and commit |
 | Promotion without rebuilding | The verified RC asset is downloaded and attached to the stable release |
 | Least privilege | Each job declares only the permissions it needs |
-| Dependency determinism | `actions.lock` pins workflow dependencies |
+| Pinned dependencies | `actions.lock` pins workflow action versions |
 
 ## Run a release
 
-Open [**Actions → Release**](../../actions/workflows/release.yml), choose
-`patch`, `minor`, or `major`, and run the workflow from `main`.
+Open the [Release workflow](../../actions/workflows/release.yml), select
+`patch`, `minor`, or `major`, then run it from `main`.
 
-If the latest stable release is `v1.4.2`, a minor dispatch selects
-`v1.5.0-rc.1`. A failed attempt leaves that immutable candidate as an audit
-record; the next minor dispatch selects `v1.5.0-rc.2`. Only a candidate that
-passes exact-tag validation is published as `v1.5.0`.
+If the latest stable tag is `v1.4.2`, a minor release starts with
+`v1.5.0-rc.1`. If candidate validation fails, the published prerelease remains
+as an audit record and the next minor release uses `v1.5.0-rc.2`. Only a
+candidate that passes validation is published as `v1.5.0`.
 
-## Why dispatch instead of `jobs.<job_id>.uses`
+## Why validation runs separately
 
-GitHub Actions does not allow expressions in `uses:`, so a caller cannot write
-`uses: owner/repository/workflow.yml@${{ needs.release.outputs.tag }}`. The
-release workflow instead dispatches the validation workflow at the generated
-RC tag and waits for that correlated run. Inside the candidate run, `$/`
-resolves the action from the workflow's exact running commit.
+`release.yml` is the human entry point. After publishing an RC, it starts
+`release-test.yml` through the workflow dispatch API at the generated tag and
+waits for that specific run. The validation workflow declares
+`workflow_dispatch` so the API can start it at a dynamic ref.
+
+A reusable workflow call cannot replace this step because GitHub Actions does
+not allow expressions in `uses:`. The candidate tag therefore cannot be passed
+to `jobs.<job_id>.uses`. Inside the dispatched candidate run, `$/` resolves the
+action from the workflow's exact running commit.
 
 ## Verify a release
 
 ```bash
-gh release verify v1.5.0 --repo nodeselector/actions-release-demo
-gh release download v1.5.0 --repo nodeselector/actions-release-demo
-gh release verify-asset v1.5.0 actions-release-demo-v1.5.0.tar.gz \
+gh release verify v0.1.1 --repo nodeselector/actions-release-demo
+gh release download v0.1.1 --repo nodeselector/actions-release-demo
+gh release verify-asset v0.1.1 actions-release-demo-v0.1.1.tar.gz \
   --repo nodeselector/actions-release-demo
-gh attestation verify actions-release-demo-v1.5.0.tar.gz \
+gh attestation verify actions-release-demo-v0.1.1.tar.gz \
   --repo nodeselector/actions-release-demo
 ```
 
@@ -71,8 +75,8 @@ and [release verification](https://docs.github.com/en/code-security/how-tos/secu
 
 | Artifact | Evidence |
 | --- | --- |
-| Full release pipeline | [Minor release run](https://github.com/nodeselector/actions-release-demo/actions/runs/33662228818) |
-| Exact-tag `$/` execution | [RC validation run](https://github.com/nodeselector/actions-release-demo/actions/runs/33662273068) |
-| Immutable candidate | [`v0.1.0-rc.2`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.0-rc.2) |
-| Immutable stable release | [`v0.1.0`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.0) |
+| Full release pipeline | [Patch release run](https://github.com/nodeselector/actions-release-demo/actions/runs/33664342318) |
+| Exact-tag `$/` execution | [RC validation run](https://github.com/nodeselector/actions-release-demo/actions/runs/33664386924) |
+| Immutable candidate | [`v0.1.1-rc.1`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.1-rc.1) |
+| Immutable stable release | [`v0.1.1`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.1) |
 | Server-enforced tag protection | [Immutable release tag ruleset](https://github.com/nodeselector/actions-release-demo/rules/22130912) |

@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Semantic version component to increment
+        description: Version part to increment
         required: true
         default: patch
         type: choice
@@ -45,9 +45,15 @@ jobs:
           BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/heads/main"
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Run releases from main"
+            exit 1
+          fi
           git fetch --force --tags origin main
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+            echo "::error::Main advanced after this run started. Dispatch a new release."
+            exit 1
+          fi
 
           latest="$(
             git tag --list 'v*.*.*' --sort=-version:refname |
@@ -76,11 +82,11 @@ jobs:
           asset="actions-release-demo-$stable.tar.gz"
 
           if git show-ref --verify --quiet "refs/tags/$stable"; then
-            echo "::error::$stable already exists"
+            echo "::error::Release tag $stable already exists"
             exit 1
           fi
           if git show-ref --verify --quiet "refs/tags/$candidate"; then
-            echo "::error::$candidate already exists"
+            echo "::error::Release candidate tag $candidate already exists"
             exit 1
           fi
 
@@ -108,13 +114,16 @@ jobs:
         with:
           subject-path: dist/${{ steps.version.outputs.asset }}
 
-      - name: Create the immutable candidate tag
+      - name: Create the candidate tag
         env:
           CANDIDATE: ${{ steps.version.outputs.candidate }}
         run: |
           set -euo pipefail
           git fetch --force origin main
-          test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
+          if [[ "$GITHUB_SHA" != "$(git rev-parse origin/main)" ]]; then
+            echo "::error::Main advanced while the candidate was building. Dispatch a new release."
+            exit 1
+          fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git tag -a "$CANDIDATE" "$GITHUB_SHA" -m "Release candidate $CANDIDATE"
@@ -134,7 +143,7 @@ jobs:
             --prerelease \
             --latest=false \
             --title "$CANDIDATE" \
-            --notes "Immutable release candidate for validation."
+            --notes "Built from [$GITHUB_SHA](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) for exact-tag validation by [release run $GITHUB_RUN_ID](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
           gh release edit "$CANDIDATE" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false \
@@ -158,7 +167,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --ref "$CANDIDATE" \
             -f asset="$ASSET" \
-            -f request_id="$GITHUB_RUN_ID"
+            -f release_run_id="$GITHUB_RUN_ID"
 
       - name: Wait for the exact validation run
         env:
@@ -166,7 +175,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          title="Validate $CANDIDATE for request $GITHUB_RUN_ID"
+          title="Validate $CANDIDATE for release run $GITHUB_RUN_ID"
           run_id=""
           for _ in {1..30}; do
             run_id="$(
@@ -183,10 +192,13 @@ jobs:
             sleep 2
           done
 
-          test -n "$run_id"
+          if [[ -z "$run_id" ]]; then
+            echo "::error::The candidate validation run didn't start within 60 seconds"
+            exit 1
+          fi
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
           url="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
-          echo "Candidate validation: $url" >> "$GITHUB_STEP_SUMMARY"
+          echo "Candidate validation: [$CANDIDATE]($url)" >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: Publish stable release
@@ -217,13 +229,13 @@ jobs:
           gh release verify-asset "$CANDIDATE" "dist/$ASSET" --repo "$GITHUB_REPOSITORY"
           gh attestation verify "dist/$ASSET" --repo "$GITHUB_REPOSITORY"
 
-      - name: Create the immutable stable tag
+      - name: Create the stable tag
         env:
           STABLE: ${{ needs.candidate.outputs.stable }}
         run: |
           set -euo pipefail
           if git ls-remote --exit-code --tags origin "refs/tags/$STABLE" >/dev/null 2>&1; then
-            echo "::error::$STABLE already exists"
+            echo "::error::Release tag $STABLE already exists"
             exit 1
           fi
           git config user.name github-actions[bot]
@@ -257,5 +269,5 @@ jobs:
             fi
             sleep 2
           done
-          echo "::error::Release attestation was not available"
+          echo "::error::Release attestation for $STABLE wasn't available after 60 seconds. Verify it later with: gh release verify $STABLE --repo $GITHUB_REPOSITORY"
           exit 1

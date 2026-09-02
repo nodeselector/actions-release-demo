@@ -1,5 +1,5 @@
 name: Validate release candidate
-run-name: Validate ${{ github.ref_name }} for request ${{ inputs.request_id }}
+run-name: Validate ${{ github.ref_name }} for release run ${{ inputs.release_run_id }}
 
 on:
   workflow_dispatch:
@@ -8,8 +8,8 @@ on:
         description: Candidate release asset name
         required: true
         type: string
-      request_id:
-        description: Parent workflow run ID
+      release_run_id:
+        description: Release workflow run ID
         required: true
         type: string
 
@@ -19,12 +19,13 @@ permissions:
 
 jobs:
   exact-tag:
+    name: Validate action and release asset
     runs-on: ubuntu-latest
     steps:
       - id: candidate
         uses: $/
 
-      - name: Prove the action came from the candidate tag
+      - name: Confirm the action commit
         env:
           ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
           ACTION_REF: ${{ steps.candidate.outputs.ref }}
@@ -50,7 +51,10 @@ jobs:
             fi
             sleep 2
           done
-          test "$verified" = true
+          if [[ "$verified" != true ]]; then
+            echo "::error::Release attestation for $GITHUB_REF_NAME wasn't available after 60 seconds. Retry this validation run."
+            exit 1
+          fi
 
           gh release download "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
@@ -59,7 +63,7 @@ jobs:
           gh attestation verify "$ASSET" --repo "$GITHUB_REPOSITORY"
 
           {
-            echo "### Exact candidate proof"
+            echo "### Release candidate verification"
             echo
             echo "| Source | Value |"
             echo "| --- | --- |"
