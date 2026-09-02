@@ -59,11 +59,11 @@ need one: the caller commit is the candidate commit.
 ## Verify a release
 
 ```bash
-gh release verify v0.1.1 --repo nodeselector/actions-release-demo
-gh release download v0.1.1 --repo nodeselector/actions-release-demo
-gh release verify-asset v0.1.1 actions-release-demo-v0.1.1.tar.gz \
+gh release verify v0.1.4 --repo nodeselector/actions-release-demo
+gh release download v0.1.4 --repo nodeselector/actions-release-demo
+gh release verify-asset v0.1.4 actions-release-demo-v0.1.4.tar.gz \
   --repo nodeselector/actions-release-demo
-gh attestation verify actions-release-demo-v0.1.1.tar.gz \
+gh attestation verify actions-release-demo-v0.1.4.tar.gz \
   --repo nodeselector/actions-release-demo
 ```
 
@@ -75,8 +75,8 @@ and [release verification](https://docs.github.com/en/code-security/how-tos/secu
 
 | Artifact | Evidence |
 | --- | --- |
-| Full release pipeline | [Patch release run](https://github.com/nodeselector/actions-release-demo/actions/runs/33664342318) |
-| Exact-tag `$/` execution | [RC validation run](https://github.com/nodeselector/actions-release-demo/actions/runs/33664386924) |
-| Immutable candidate | [`v0.1.1-rc.1`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.1-rc.1) |
-| Immutable stable release | [`v0.1.1`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.1) |
+| Full release pipeline | [Patch release run](https://github.com/nodeselector/actions-release-demo/actions/runs/33668245999) |
+| Reusable `$/` workflow and action | [Candidate validation job](https://github.com/nodeselector/actions-release-demo/actions/runs/33668245999/job/100375254269) |
+| Immutable candidate | [`v0.1.4-rc.1`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.4-rc.1) |
+| Immutable stable release | [`v0.1.4`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.4) |
 | Server-enforced tag protection | [Immutable release tag ruleset](https://github.com/nodeselector/actions-release-demo/rules/22130912) |
