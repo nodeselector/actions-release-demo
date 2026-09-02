@@ -244,7 +244,7 @@ jobs:
             --verify-tag \
             --draft \
             --generate-notes \
-            --notes-start-tag "$CANDIDATE" \
+            --notes "Promoted from immutable release candidate [$CANDIDATE](https://github.com/$GITHUB_REPOSITORY/releases/tag/$CANDIDATE)." \
             --title "$STABLE"
           gh release edit "$STABLE" \
             --repo "$GITHUB_REPOSITORY" \

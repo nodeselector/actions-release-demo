@@ -66,3 +66,13 @@ gh attestation verify actions-release-demo-v1.5.0.tar.gz \
 See GitHub's documentation for
 [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 and [release verification](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity).
+
+## Live proof
+
+| Artifact | Evidence |
+| --- | --- |
+| Full release pipeline | [Minor release run](https://github.com/nodeselector/actions-release-demo/actions/runs/33662228818) |
+| Exact-tag `$/` execution | [RC validation run](https://github.com/nodeselector/actions-release-demo/actions/runs/33662273068) |
+| Immutable candidate | [`v0.1.0-rc.2`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.0-rc.2) |
+| Immutable stable release | [`v0.1.0`](https://github.com/nodeselector/actions-release-demo/releases/tag/v0.1.0) |
+| Server-enforced tag protection | [Immutable release tag ruleset](https://github.com/nodeselector/actions-release-demo/rules/22130912) |
