@@ -265,6 +265,16 @@ jobs:
 
           for _ in {1..30}; do
             if gh release verify "$STABLE" --repo "$GITHUB_REPOSITORY"; then
+              {
+                echo "### Stable release published"
+                echo
+                echo "| Item | Value |"
+                echo "| --- | --- |"
+                echo "| Stable release | [$STABLE](https://github.com/$GITHUB_REPOSITORY/releases/tag/$STABLE) |"
+                echo "| Source candidate | [$CANDIDATE](https://github.com/$GITHUB_REPOSITORY/releases/tag/$CANDIDATE) |"
+                echo "| Commit | [$GITHUB_SHA](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) |"
+                echo "| Asset | [$ASSET](https://github.com/$GITHUB_REPOSITORY/releases/download/$STABLE/$ASSET) |"
+              } >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 2
