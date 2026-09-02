@@ -27,17 +27,14 @@ jobs:
 
       - name: Confirm the action commit
         env:
-          ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
           ACTION_REF: ${{ steps.candidate.outputs.ref }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF_TYPE" = "tag"
           test "$ACTION_REF" = "$GITHUB_SHA"
-          test "$ACTION_MARKER" = "release-source"
 
       - name: Verify the immutable candidate and its provenance
         env:
-          ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
           ACTION_REF: ${{ steps.candidate.outputs.ref }}
           ASSET: ${{ inputs.asset }}
           GH_TOKEN: ${{ github.token }}
@@ -70,6 +67,5 @@ jobs:
             echo "| Workflow ref | \`$GITHUB_REF\` |"
             echo "| Workflow SHA | \`$GITHUB_SHA\` |"
             echo "| \`$/\` action SHA | \`$ACTION_REF\` |"
-            echo "| \`$/\` action marker | \`$ACTION_MARKER\` |"
             echo "| Immutable asset | \`$ASSET\` |"
           } >> "$GITHUB_STEP_SUMMARY"

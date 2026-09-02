@@ -1,21 +1,17 @@
-name: Release source marker
+name: Release source
 description: Reports the source used to load this action
 
 outputs:
-  marker:
-    description: Marker stored in the action package
-    value: ${{ steps.marker.outputs.value }}
   ref:
     description: Ref used to load this action
-    value: ${{ steps.marker.outputs.ref }}
+    value: ${{ steps.source.outputs.ref }}
 
 runs:
   using: composite
   steps:
-    - id: marker
+    - id: source
       shell: bash
       env:
         ACTION_REF: ${{ github.action_ref }}
       run: |
         echo "ref=$ACTION_REF" >> "$GITHUB_OUTPUT"
-        echo "value=$(<"$GITHUB_ACTION_PATH/release-marker.txt")" >> "$GITHUB_OUTPUT"
