@@ -1,0 +1,16 @@
+name: Release source
+description: Reports the ref used to load this action
+
+outputs:
+  ref:
+    description: Ref used to load this action
+    value: ${{ steps.source.outputs.ref }}
+
+runs:
+  using: composite
+  steps:
+    - id: source
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+      run: echo "ref=$ACTION_REF" >> "$GITHUB_OUTPUT"

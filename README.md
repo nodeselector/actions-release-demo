@@ -26,7 +26,7 @@ flowchart LR
 | --- | --- |
 | Serialized version selection | One `release` concurrency group |
 | Predictable versions | Latest stable tag plus `major`, `minor`, or `patch`; existing RC tags increment `rc.N` |
-| Exact source under test | The RC tag, reusable workflow, and `$/` action resolve to the release run's commit |
+| Exact source under test | The RC tag, reusable workflow, root action, and nested action resolve to the release run's commit |
 | Protected tags | Tags are created once without force; a repository ruleset blocks updates and deletion |
 | Immutable publication | Releases are drafted, assets attached, then published with release immutability enabled |
 | Build provenance | GitHub artifact attestation binds the archive to its source workflow and commit |
@@ -49,9 +49,10 @@ that passes validation is published as `v1.5.0`.
 
 The release workflow creates the RC tag at its own commit, then calls
 `release-test.yml` with `uses: $/.github/workflows/release-test.yml`. The
-reusable workflow and its `uses: $/` action both resolve from that same commit.
-The candidate tag is passed as an input only to verify the immutable release
-and asset.
+reusable workflow invokes the root action with `uses: $/`; that composite
+action invokes `.github/actions/release-source` with another `uses: $/`. Every
+layer resolves from the caller commit. The candidate tag is passed as an input
+only to verify the immutable release and asset.
 
 GitHub Actions does not allow expressions in `uses:`, but this flow does not
 need one: the caller commit is the candidate commit.
