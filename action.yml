@@ -1,5 +1,5 @@
-name: Release demo
-description: Reports its source through a nested same-repository action
+name: Release source
+description: Reports the source used to load this action
 
 outputs:
   ref:
@@ -10,4 +10,7 @@ runs:
   using: composite
   steps:
     - id: source
-      uses: $/.github/actions/release-source
+      shell: bash
+      env:
+        ACTION_REF: ${{ github.action_ref }}
+      run: echo "ref=$ACTION_REF" >> "$GITHUB_OUTPUT"
