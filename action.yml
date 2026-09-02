@@ -1,0 +1,14 @@
+name: Release candidate marker
+description: Reports which repository snapshot supplied this action
+
+outputs:
+  marker:
+    description: Marker stored beside this action
+    value: ${{ steps.marker.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - id: marker
+      shell: bash
+      run: echo "value=$(<"$GITHUB_ACTION_PATH/release-marker.txt")" >> "$GITHUB_OUTPUT"

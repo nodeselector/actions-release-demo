@@ -1,0 +1,50 @@
+name: Release candidate demo
+run-name: Dispatch ${{ inputs.ref }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Existing release-candidate tag to validate
+        required: true
+        default: v0.1.0-rc.1
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch validation at the RC tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref }}
+        run: gh workflow run release-test.yml --ref "$REF" -f request_id="$GITHUB_RUN_ID"
+
+      - name: Wait for the exact validation run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref }}
+        run: |
+          title="Validate $REF for request $GITHUB_RUN_ID"
+          for _ in {1..30}; do
+            run_id="$(gh run list \
+              --workflow release-test.yml \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,displayTitle \
+              --jq ".[] | select(.displayTitle == \"$title\") | .databaseId" |
+              head -1)"
+            if [[ -n "$run_id" ]]; then
+              break
+            fi
+            sleep 2
+          done
+
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+          url="$(gh run view "$run_id" --json url --jq .url)"
+          echo "Validated run: $url" >> "$GITHUB_STEP_SUMMARY"

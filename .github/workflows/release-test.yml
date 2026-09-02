@@ -1,0 +1,40 @@
+name: Validate release candidate
+run-name: Validate ${{ github.ref_name }} for request ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Parent workflow run ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  exact-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - id: candidate
+        uses: $/
+
+      - name: Prove checkout and action came from the RC tag
+        env:
+          ACTION_MARKER: ${{ steps.candidate.outputs.marker }}
+        run: |
+          test "$GITHUB_REF_TYPE" = "tag"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$ACTION_MARKER" = "release-candidate"
+          {
+            echo "### Exact-tag proof"
+            echo
+            echo "| Source | Value |"
+            echo "| --- | --- |"
+            echo "| Workflow ref | \`$GITHUB_REF\` |"
+            echo "| Workflow SHA | \`$GITHUB_SHA\` |"
+            echo "| Checkout SHA | \`$(git rev-parse HEAD)\` |"
+            echo "| \`$/\` action marker | \`$ACTION_MARKER\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
