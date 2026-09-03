@@ -1,0 +1,19 @@
+name: Self-hosted parser repro
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nested-self-reference:
+    runs-on: [self-hosted, selfref-parser]
+    steps:
+      - id: release
+        uses: $/
+
+      - name: Confirm nested action source
+        env:
+          ACTION_REF: ${{ steps.release.outputs.ref }}
+        run: test "$ACTION_REF" = "$GITHUB_SHA"
