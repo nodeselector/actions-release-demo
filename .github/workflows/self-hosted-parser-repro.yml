@@ -1,7 +1,8 @@
 name: Self-hosted parser repro
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [runner-selfref-parser-repro]
 
 permissions:
   contents: read
